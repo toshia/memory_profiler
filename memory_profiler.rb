@@ -8,13 +8,10 @@ Plugin.create :memory_profiler do
       Plugin.call(:spectrum_set, lambda {
         notice "memory_profiler: start"
         ObjectSpace.garbage_collect
-        objects = Hash.new # :class => count
+        objects = Hash.new(0) # :class => count
 
         notice "memory_profiler: counting objects..."
-        ObjectSpace.each_object.to_a.each{ |o|
-          unless (o.irregulareval? rescue nil)
-            objects[o.class] ||= 0
-            objects[o.class] += 1 end }
+        ObjectSpace.each_object{|o| objects[o.class] += 1 unless (o.irregulareval? rescue nil) }
 
         output = File.join(output_dir, Time.now.strftime("%Y-%m-%d-%H%M"))
         notice "memory_profiler: done. writing file #{output}"
