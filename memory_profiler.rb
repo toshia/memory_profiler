@@ -1,5 +1,6 @@
-# -*- coding:utf-8 -*-
-# メモリプロファイラ
+# frozen_string_literal: true
+
+require 'csv'
 
 Plugin.create :memory_profiler do
   def object_counts(output_dir)
@@ -8,15 +9,28 @@ Plugin.create :memory_profiler do
     objects = Hash.new(0) # :class => count
 
     notice "memory_profiler: counting objects..."
-    ObjectSpace.each_object.to_a.each{|o| objects[o.class] += 1 unless (o.irregulareval? rescue nil) }
+    ObjectSpace.each_object.to_a.each{|o|
+      objects[o.class.name || o.class.to_s] += 1 unless (o.irregulareval? rescue nil)
+    }
+    data_csv_fn = File.join(output_dir, 'data.csv')
+    header_csv_fn = File.join(output_dir, 'header.csv')
+    notice "memory_profiler: done. writing file #{data_csv_fn}"
 
-    output = File.join(output_dir, Time.now.strftime("%Y-%m-%d-%H%M"))
-    notice "memory_profiler: done. writing file #{output}"
+    header = if FileTest.exist?(header_csv_fn)
+               CSV.parse(File.open(header_csv_fn).readline).first.cdr
+             else
+               [*objects.keys.sort]
+             end
 
-    File.open(output, 'w') do |ostream|
-      Marshal.dump(objects.map{|k, v| [(k || 'nil').to_s.to_sym, v]}, ostream)
+    CSV.open(data_csv_fn, 'ab') do |ostream|
+      new_keys = objects.keys.reject(&header.method(:include?))
+      header = [*header, *new_keys]
+      CSV.open(header_csv_fn, 'wb') do |oheader|
+        oheader << ['timestamp', *header]
+      end
+      ostream << [Time.now.iso8601, *objects.values_at(*header)]
     end
-    notice "memory_profiler: wrote #{output}."
+    notice "memory_profiler: wrote #{data_csv_fn}."
     objects.clear
     profile(output_dir)
   end
